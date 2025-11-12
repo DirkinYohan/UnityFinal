@@ -667,7 +667,7 @@ PrefabInstance:
     - target: {fileID: 5866666021909216657, guid: 845c276b8cd9f0640b807a6fb02c8355, type: 3}
       propertyPath: m_Controller
       value: 
-      objectReference: {fileID: 9100000, guid: cdf3f5807ab62f84f91a9e72ff205145, type: 2}
+      objectReference: {fileID: 9100000, guid: 67cc423f2c84f0e4d99cd9d66e42ab9a, type: 2}
     - target: {fileID: 5866666021909216657, guid: 845c276b8cd9f0640b807a6fb02c8355, type: 3}
       propertyPath: m_ApplyRootMotion
       value: 1
@@ -1864,7 +1864,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   walkSpeed: 5
-  jumpHeight: 5
+  jumpHeight: 2
   rotationSpeed: 50
   characterModel: {fileID: 0}
 --- !u!114 &646041735
@@ -4629,20 +4629,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0259072571008ca4a8b48ef5e37591bc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Objetivo: {fileID: 646041720}
-  Velocidad: 2
-  IA: {fileID: 2020522817}
-  AtaqueSound: {fileID: 8300000, guid: 1b0e2a06e08551e4688385862bb32485, type: 3}
-  MuerteSound: {fileID: 8300000, guid: c38bc2f8ed8645c48a23e073a4402a5b, type: 3}
-  AudioSourceAtaque: {fileID: 2020522819}
-  AudioSourceMuerte: {fileID: 2020522819}
-  health: 100
-  maxHealth: 100
-  attackDamage: 10
-  attackRange: 2
-  attackCooldown: 1
-  rotationSpeed: 5
-  smoothRotation: 1
+  objetivo: {fileID: 646041720}
+  velocidadMovimiento: 3
+  velocidadRotacion: 5
+  rotacionSuave: 1
+  agenteIA: {fileID: 2020522817}
+  sonidoAtaque: {fileID: 8300000, guid: 1b0e2a06e08551e4688385862bb32485, type: 3}
+  audioSourceAtaque: {fileID: 2020522819}
+  sonidoMuerte: {fileID: 8300000, guid: c38bc2f8ed8645c48a23e073a4402a5b, type: 3}
+  audioSourceMuerte: {fileID: 2020522819}
+  saludMaxima: 100
+  saludActual: 100
+  "da\xF1oAtaque": 10
+  rangoAtaque: 2
+  cooldownAtaque: 0.25
+  rangoDeteccion: 100
+  rangoPerdida: 40
 --- !u!64 &2020522821
 MeshCollider:
   m_ObjectHideFlags: 0

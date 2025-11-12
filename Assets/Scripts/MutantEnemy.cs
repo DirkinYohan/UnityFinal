@@ -1,234 +1,456 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 
 public class MutantEnemy : MonoBehaviour
 {
-    public Transform Objetivo;
-    public float Velocidad;
-    public NavMeshAgent IA;
+    [Header("OBJETIVO")]
+    public Transform objetivo;
     
-    // Variables para los sonidos
-    public AudioClip AtaqueSound;
-    public AudioClip MuerteSound;
-    public AudioSource AudioSourceAtaque;
-    public AudioSource AudioSourceMuerte;
+    [Header("VELOCIDAD")]
+    public float velocidadMovimiento = 3f;
+    public float velocidadRotacion = 5f;
+    public bool rotacionSuave = true;
     
-    // Variables de salud añadidas
-    public float health = 100f;
-    public float maxHealth = 100f;
-
-    // Variables de ataque
-    public float attackDamage = 10f;
-    public float attackRange = 2f;
-    public float attackCooldown = 1f;
-    private float lastAttackTime = 0f;
-
-    // Variables para el giro
-    public float rotationSpeed = 5f; // Velocidad de rotación hacia el jugador
-    public bool smoothRotation = true; // Si queremos rotación suave o instantánea
-
-    // Referencia al Animator
+    [Header("IA - NAVEGACIÓN")]
+    public NavMeshAgent agenteIA;
+    
+    [Header("AUDIO - ATAQUE")]
+    public AudioClip sonidoAtaque;
+    public AudioSource audioSourceAtaque;
+    
+    [Header("AUDIO - MUERTE")]
+    public AudioClip sonidoMuerte;
+    public AudioSource audioSourceMuerte;
+    
+    [Header("SALUD")]
+    public float saludMaxima = 100f;
+    public float saludActual = 100f;
+    
+    [Header("ATAQUE")]
+    public int dañoAtaque = 10;
+    public float rangoAtaque = 2f;
+    public float cooldownAtaque = 2f;
+    
+    [Header("DETECCIÓN")]
+    public float rangoDeteccion = 30f;
+    public float rangoPerdida = 40f;
+    
+    // Propiedades públicas para la barra de vida
+    public float health => saludActual;
+    public float maxHealth => saludMaxima;
+    
     private Animator animator;
-    
-    // Parámetros del Animator
-    private readonly int velocidadHash = Animator.StringToHash("Velocidad");
-    private readonly int atacandoHash = Animator.StringToHash("Atacando");
-    private readonly int muertoHash = Animator.StringToHash("Muerto");
-    private readonly int recibiendoDanoHash = Animator.StringToHash("RecibiendoDano");
-
-    private bool estaMuerto = false;
+    private float tiempoUltimoAtaque;
+    private bool estaVivo = true;
     private bool estaAtacando = false;
+    
+    private enum EstadoEnemigo
+    {
+        Idle,
+        Run,
+        Attack,
+        Death
+    }
+    private EstadoEnemigo estadoActual = EstadoEnemigo.Idle;
 
     void Start()
     {
-        if (AudioSourceAtaque == null)
-            AudioSourceAtaque = GetComponent<AudioSource>();
+        InicializarComponentes();
+        ConfigurarAgenteIA();
+        saludActual = saludMaxima;
+        ConfigurarAnimacionesIniciales();
+    }
+
+    void InicializarComponentes()
+    {
+        if (animator == null)
+            animator = GetComponent<Animator>();
             
-        // Obtener referencia al Animator
-        animator = GetComponent<Animator>();
-        
-        // Inicializar salud
-        health = maxHealth;
+        if (agenteIA == null)
+            agenteIA = GetComponent<NavMeshAgent>();
+            
+        if (objetivo == null)
+        {
+            GameObject jugador = GameObject.FindGameObjectWithTag("Player");
+            if (jugador != null)
+                objetivo = jugador.transform;
+            else
+                Debug.LogError("No se encontró el jugador con tag 'Player'");
+        }
+    }
+
+    void ConfigurarAnimacionesIniciales()
+    {
+        if (animator != null)
+        {
+            animator.SetBool("IsIdle", true);
+            animator.SetBool("IsRunning", false);
+            animator.SetBool("IsAttacking", false);
+            animator.SetBool("IsDead", false);
+        }
+    }
+
+    void ConfigurarAgenteIA()
+    {
+        if (agenteIA != null)
+        {
+            agenteIA.speed = velocidadMovimiento;
+            agenteIA.angularSpeed = velocidadRotacion * 100f;
+            agenteIA.stoppingDistance = rangoAtaque - 0.2f;
+        }
     }
 
     void Update()
     {
-        if (estaMuerto) return;
+        if (!estaVivo) return;
         
-        IA.speed = Velocidad;
-        IA.SetDestination(Objetivo.position);
+        VerificarEstadoSalud();
+        MaquinaDeEstados();
+        ActualizarRotacion();
+        ActualizarAnimaciones();
+        
+        // DEBUG: Mostrar estado actual en consola
+        Debug.Log($"Estado: {estadoActual}, Atacando: {estaAtacando}, Cooldown: {Time.time - tiempoUltimoAtaque}");
+    }
+
+    void VerificarEstadoSalud()
+    {
+        if (saludActual <= 0 && estaVivo)
+        {
+            Morir();
+        }
+    }
+
+    void MaquinaDeEstados()
+    {
+        if (objetivo == null) return;
+
+        switch (estadoActual)
+        {
+            case EstadoEnemigo.Idle:
+                EstadoIdle();
+                break;
+                
+            case EstadoEnemigo.Run:
+                EstadoRun();
+                break;
+                
+            case EstadoEnemigo.Attack:
+                EstadoAttack();
+                break;
+        }
+    }
+
+    void EstadoIdle()
+    {
+        if (ObjetivoEnRango(rangoDeteccion) && objetivo != null)
+        {
+            CambiarEstado(EstadoEnemigo.Run);
+        }
+    }
+
+    void EstadoRun()
+    {
+        if (objetivo == null)
+        {
+            CambiarEstado(EstadoEnemigo.Idle);
+            return;
+        }
+        
+        if (agenteIA != null && agenteIA.isActiveAndEnabled)
+        {
+            agenteIA.SetDestination(objetivo.position);
+        }
+        
+        // VERIFICAR SI PUEDE ATACAR
+        if (ObjetivoEnRango(rangoAtaque))
+        {
+            CambiarEstado(EstadoEnemigo.Attack);
+        }
+        
+        if (!ObjetivoEnRango(rangoPerdida))
+        {
+            CambiarEstado(EstadoEnemigo.Idle);
+        }
+    }
+
+    void EstadoAttack()
+    {
+        if (objetivo == null)
+        {
+            CambiarEstado(EstadoEnemigo.Idle);
+            return;
+        }
+
+        // DETENER EL MOVIMIENTO
+        if (agenteIA != null && agenteIA.hasPath)
+        {
+            agenteIA.isStopped = true;
+        }
+        
+        // ROTAR HACIA EL OBJETIVO
+        RotarHaciaObjetivo();
+        
+        // VERIFICAR SI PUEDE ATACAR
+        bool puedeAtacar = Time.time - tiempoUltimoAtaque >= cooldownAtaque;
+        bool enRango = ObjetivoEnRango(rangoAtaque);
+        
+        Debug.Log($"Puede atacar: {puedeAtacar}, En rango: {enRango}, Esta atacando: {estaAtacando}");
+        
+        if (puedeAtacar && enRango && !estaAtacando)
+        {
+            IniciarAtaque();
+        }
+        
+        // SI SE ALEJÓ DEMASIADO, PERSEGUIR
+        if (!enRango && !estaAtacando)
+        {
+            CambiarEstado(EstadoEnemigo.Run);
+        }
+    }
+
+    void RotarHaciaObjetivo()
+    {
+        if (objetivo == null) return;
+        
+        Vector3 direccion = (objetivo.position - transform.position).normalized;
+        direccion.y = 0;
+        
+        if (direccion != Vector3.zero)
+        {
+            if (rotacionSuave)
+            {
+                Quaternion rotacionDeseada = Quaternion.LookRotation(direccion);
+                transform.rotation = Quaternion.Slerp(transform.rotation, rotacionDeseada, velocidadRotacion * Time.deltaTime);
+            }
+            else
+            {
+                transform.rotation = Quaternion.LookRotation(direccion);
+            }
+        }
+    }
+
+    void ActualizarRotacion()
+    {
+        if (agenteIA != null && agenteIA.hasPath && estadoActual == EstadoEnemigo.Run && !agenteIA.isStopped)
+        {
+            if (rotacionSuave && agenteIA.velocity.magnitude > 0.1f)
+            {
+                Quaternion rotacionDeseada = Quaternion.LookRotation(agenteIA.velocity.normalized);
+                transform.rotation = Quaternion.Slerp(transform.rotation, rotacionDeseada, velocidadRotacion * Time.deltaTime);
+            }
+        }
+    }
+
+    void ActualizarAnimaciones()
+    {
+        if (animator == null) return;
+
+        // Actualizar velocidad para la animación de caminar/correr
+        float velocidad = 0f;
+        if (agenteIA != null && estadoActual == EstadoEnemigo.Run)
+        {
+            velocidad = agenteIA.velocity.magnitude;
+        }
+        animator.SetFloat("Speed", velocidad);
+        
+        // Actualizar estado de ataque
+        animator.SetBool("IsAttacking", estaAtacando);
+    }
+
+    void IniciarAtaque()
+    {
+        Debug.Log("INICIANDO ATAQUE!");
+        
+        estaAtacando = true;
+        tiempoUltimoAtaque = Time.time;
         
         if (animator != null)
         {
-            animator.SetFloat(velocidadHash, IA.velocity.magnitude);
+            // USAR TRIGGER PARA LA ANIMACIÓN DE ATAQUE
+            animator.SetTrigger("Attack");
+            animator.SetBool("IsAttacking", true);
         }
         
-        // Girar hacia el jugador
-        RotateTowardsPlayer();
-        
-        // Lógica de ataque MEJORADA
-        float distanceToPlayer = Vector3.Distance(transform.position, Objetivo.position);
-        
-        if (distanceToPlayer <= attackRange)
+        if (sonidoAtaque != null && audioSourceAtaque != null)
         {
-            if (!estaAtacando && Time.time >= lastAttackTime + attackCooldown)
-            {
-                Atacar();
-            }
+            audioSourceAtaque.clip = sonidoAtaque;
+            audioSourceAtaque.Play();
+        }
+        
+        // PROGRAMAR EL DAÑO (ajusta el tiempo según tu animación)
+        Invoke("AplicarDaño", 0.5f);
+        
+        // TERMINAR EL ATAQUE (ajusta el tiempo según la duración de tu animación)
+        Invoke("TerminarAtaque", 1.5f);
+    }
+
+    void AplicarDaño()
+    {
+        if (!estaVivo || !estaAtacando) return;
+        
+        if (ObjetivoEnRango(rangoAtaque) && objetivo != null)
+        {
+            Debug.Log("Aplicando daño al jugador: " + dañoAtaque);
             
-            // Aplicar daño cuando esté atacando
-            if (estaAtacando && distanceToPlayer <= attackRange)
+            // INTENTAR DIFERENTES MÉTODOS PARA APLICAR DAÑO
+            PlayerHealth playerHealth = objetivo.GetComponent<PlayerHealth>();
+            if (playerHealth != null)
             {
-                TryApplyDamage();
+                playerHealth.TakeDamage(dañoAtaque);
+            }
+            else
+            {
+                // ALTERNATIVA: Buscar cualquier componente que tenga TakeDamage
+                MonoBehaviour[] componentes = objetivo.GetComponents<MonoBehaviour>();
+                foreach (MonoBehaviour componente in componentes)
+                {
+                    var tipo = componente.GetType();
+                    var metodo = tipo.GetMethod("TakeDamage");
+                    if (metodo != null)
+                    {
+                        metodo.Invoke(componente, new object[] { dañoAtaque });
+                        Debug.Log("Daño aplicado usando reflexión");
+                        break;
+                    }
+                }
             }
         }
         else
         {
-            estaAtacando = false;
-            if (animator != null)
-            {
-                animator.SetBool(atacandoHash, false);
-            }
+            Debug.Log("Objetivo fuera de rango para aplicar daño");
         }
-    }
-    
-    // NUEVO MÉTODO para girar hacia el jugador
-    private void RotateTowardsPlayer()
-    {
-        if (Objetivo == null) return;
-        
-        // Calcular la dirección hacia el jugador
-        Vector3 directionToPlayer = Objetivo.position - transform.position;
-        directionToPlayer.y = 0; // Mantener la rotación solo en el eje Y
-        
-        // Si hay dirección válida
-        if (directionToPlayer != Vector3.zero)
-        {
-            if (smoothRotation)
-            {
-                // Rotación suave usando Quaternion.Slerp
-                Quaternion targetRotation = Quaternion.LookRotation(directionToPlayer);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
-            }
-            else
-            {
-                // Rotación instantánea
-                transform.rotation = Quaternion.LookRotation(directionToPlayer);
-            }
-        }
-    }
-    
-    // NUEVO MÉTODO para aplicar daño
-    private void TryApplyDamage()
-    {
-        if (Time.time >= lastAttackTime + attackCooldown)
-        {
-            PlayerHealth playerHealth = Objetivo.GetComponent<PlayerHealth>();
-            if (playerHealth != null)
-            {
-                playerHealth.TakeDamage(attackDamage);
-                lastAttackTime = Time.time;
-                Debug.Log("Daño aplicado al jugador: " + attackDamage);
-            }
-        }
-    }
-    
-    public void Atacar()
-    {
-        estaAtacando = true;
-        
-        // Activar parámetro de ataque
-        if (animator != null)
-        {
-            animator.SetBool(atacandoHash, true);
-        }
-        
-        if (AtaqueSound != null && AudioSourceAtaque != null && !AudioSourceAtaque.isPlaying)
-        {
-            AudioSourceAtaque.clip = AtaqueSound;
-            AudioSourceAtaque.Play();
-        }
-    }
-    
-    // Método para ser llamado desde la animación de ataque (evento de animación)
-    public void FinAtaque()
-    {
-        estaAtacando = false;
-        if (animator != null)
-        {
-            animator.SetBool(atacandoHash, false);
-        }
-    }
-    
-    public void Morir()
-    {
-        if (estaMuerto) return;
-        
-        estaMuerto = true;
-        IA.isStopped = true;
-        
-        // Activar parámetro de muerte
-        if (animator != null)
-        {
-            animator.SetBool(muertoHash, true);
-        }
-        
-        if (MuerteSound != null && AudioSourceMuerte != null)
-        {
-            AudioSourceMuerte.clip = MuerteSound;
-            AudioSourceMuerte.Play();
-        }
-        
-        StartCoroutine(DestruirDespuesDeSonido());
-        Debug.Log("Enemigo muerto!");
     }
 
-    private IEnumerator DestruirDespuesDeSonido()
+    void TerminarAtaque()
     {
-        if (AudioSourceMuerte != null && MuerteSound != null)
-        {
-            yield return new WaitForSeconds(MuerteSound.length);
-        }
+        Debug.Log("Terminando ataque");
+        estaAtacando = false;
         
-        Destroy(gameObject);
-    }
-    
-    public void RecibirDano(int cantidadDano)
-    {
-        if (estaMuerto) return;
-        
-        health -= cantidadDano;
-        
-        // Trigger para animación de recibir daño
         if (animator != null)
         {
-            animator.SetTrigger(recibiendoDanoHash);
+            animator.SetBool("IsAttacking", false);
         }
         
-        if (health <= 0)
+        // REANUDAR MOVIMIENTO SI ES NECESARIO
+        if (estadoActual == EstadoEnemigo.Attack && agenteIA != null)
         {
-            health = 0;
-            Morir();
+            if (!ObjetivoEnRango(rangoAtaque))
+            {
+                CambiarEstado(EstadoEnemigo.Run);
+            }
         }
     }
-    
-    // Nuevo método para obtener la salud actual (útil para la barra de salud)
-    public float GetHealth()
+
+    void Morir()
     {
-        return health;
+        estaVivo = false;
+        CambiarEstado(EstadoEnemigo.Death);
+        
+        if (sonidoMuerte != null && audioSourceMuerte != null)
+        {
+            audioSourceMuerte.clip = sonidoMuerte;
+            audioSourceMuerte.Play();
+        }
+        
+        if (agenteIA != null)
+        {
+            agenteIA.isStopped = true;
+            agenteIA.enabled = false;
+        }
+        
+        // CANCELAR CUALQUIER INVOCACIÓN PENDIENTE
+        estaAtacando = false;
+        CancelInvoke("AplicarDaño");
+        CancelInvoke("TerminarAtaque");
+        
+        Destroy(gameObject, 3f);
     }
-    
-    // Nuevo método para obtener la salud máxima (útil para la barra de salud)
-    public float GetMaxHealth()
+
+    public void RecibirDano(int dano)
     {
-        return maxHealth;
+        if (!estaVivo) return;
+        
+        saludActual -= dano;
+        saludActual = Mathf.Clamp(saludActual, 0, saludMaxima);
+        Debug.Log($"Enemigo recibió {dano} de daño. Salud actual: {saludActual}");
     }
-    
-    // Método para verificar si está muerto (útil para otros scripts)
+
     public bool EstaMuerto()
     {
-        return estaMuerto;
+        return !estaVivo;
+    }
+
+    bool ObjetivoEnRango(float rango)
+    {
+        if (objetivo == null) return false;
+        
+        float distancia = Vector3.Distance(transform.position, objetivo.position);
+        return distancia <= rango;
+    }
+
+    void CambiarEstado(EstadoEnemigo nuevoEstado)
+    {
+        if (estadoActual == nuevoEstado) return;
+        
+        Debug.Log($"Cambiando estado de {estadoActual} a {nuevoEstado}");
+        
+        estadoActual = nuevoEstado;
+        
+        // CONFIGURAR AGENTE DE NAVEGACIÓN
+        if (agenteIA != null)
+        {
+            switch (estadoActual)
+            {
+                case EstadoEnemigo.Idle:
+                    agenteIA.isStopped = true;
+                    agenteIA.ResetPath();
+                    break;
+                    
+                case EstadoEnemigo.Run:
+                    agenteIA.isStopped = false;
+                    break;
+                    
+                case EstadoEnemigo.Attack:
+                    agenteIA.isStopped = true;
+                    break;
+                    
+                case EstadoEnemigo.Death:
+                    agenteIA.isStopped = true;
+                    break;
+            }
+        }
+        
+        // CONFIGURAR ANIMACIONES
+        if (animator != null)
+        {
+            animator.SetBool("IsIdle", estadoActual == EstadoEnemigo.Idle);
+            animator.SetBool("IsRunning", estadoActual == EstadoEnemigo.Run);
+            animator.SetBool("IsDead", estadoActual == EstadoEnemigo.Death);
+        }
+    }
+
+    // Gizmos para visualizar los rangos en el editor
+    void OnDrawGizmosSelected()
+    {
+        // Rango de ataque (rojo)
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, rangoAtaque);
+        
+        // Rango de detección (amarillo)
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(transform.position, rangoDeteccion);
+        
+        // Rango de pérdida (azul)
+        Gizmos.color = Color.blue;
+        Gizmos.DrawWireSphere(transform.position, rangoPerdida);
+        
+        // Línea hacia el objetivo (verde si en rango, rojo si no)
+        if (objetivo != null)
+        {
+            float distancia = Vector3.Distance(transform.position, objetivo.position);
+            Gizmos.color = distancia <= rangoAtaque ? Color.green : Color.white;
+            Gizmos.DrawLine(transform.position, objetivo.position);
+        }
     }
 }

@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using TMPro;
 using System.Collections;
+using System.Linq;
 
 public class LevelManager : MonoBehaviour
 {
@@ -47,8 +48,6 @@ public class LevelManager : MonoBehaviour
             messageText.gameObject.SetActive(false);
         }
 
-        // ✅ CORRECCIÓN: Siempre mostrar el menú principal al inicio
-        // a menos que la sesión ya esté activa
         if (!hasSessionStarted)
         {
             ShowMainMenu();
@@ -106,7 +105,6 @@ public class LevelManager : MonoBehaviour
     {
         isGameActive = true;
         
-        // ✅ CORRECCIÓN: Ocultar el panel del menú principal
         if (mainMenuPanel != null) 
             mainMenuPanel.SetActive(false);
 
@@ -167,12 +165,101 @@ public class LevelManager : MonoBehaviour
     {
         if(levelEndTriggered) return;
 
-        var enemy = FindObjectOfType<MutantEnemy>();
-        if(enemy == null && !levelEndTriggered)
+        bool levelCompleted = CheckLevel2Completion();
+        
+        if(levelCompleted && !levelEndTriggered)
         {
             levelEndTriggered = true;
             StartCoroutine(ShowLevelCompletedThenMenu());
         }
+    }
+
+    private bool CheckLevel2Completion()
+    {
+        // Método 1: Buscar WarrokEnemy específicamente
+        WarrokEnemy warrokEnemy = FindObjectOfType<WarrokEnemy>();
+        if (warrokEnemy != null)
+        {
+            return IsWarrokEnemyDefeated(warrokEnemy);
+        }
+        
+        // Método 2: Buscar cualquier enemigo genérico
+        GameObject[] enemies = GameObject.FindGameObjectsWithTag("Enemy");
+        if (enemies.Length > 0)
+        {
+            return AreAllEnemiesDefeated(enemies);
+        }
+        
+        return true;
+    }
+
+    private bool IsWarrokEnemyDefeated(WarrokEnemy enemy)
+    {
+        if (enemy == null) return true;
+        
+        try
+        {
+            // Método 1: Verificar si el GameObject está inactivo
+            if (!enemy.gameObject.activeInHierarchy)
+                return true;
+                
+            // Método 2: Verificar si el script está deshabilitado
+            if (!enemy.enabled)
+                return true;
+                
+            // Método 3: Usar el método público IsDead (más confiable)
+            if (enemy.IsDead())
+                return true;
+                
+            // Método 4: Verificar salud directamente
+            if (enemy.GetHealth() <= 0)
+                return true;
+                
+            // Si no se puede determinar, asumir que está activo
+            return false;
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("Error verificando WarrokEnemy: " + e.Message);
+            return true;
+        }
+    }
+
+    private bool AreAllEnemiesDefeated(GameObject[] enemies)
+    {
+        foreach (GameObject enemy in enemies)
+        {
+            if (enemy.activeInHierarchy)
+            {
+                // Verificar si tiene componentes de enemigo activos
+                WarrokEnemy warrok = enemy.GetComponent<WarrokEnemy>();
+                if (warrok != null && !warrok.IsDead())
+                    return false;
+                    
+                MutantEnemy mutant = enemy.GetComponent<MutantEnemy>();
+                if (mutant != null && mutant.enabled)
+                    return false;
+                    
+                // Verificar otros componentes genéricos
+                MonoBehaviour[] scripts = enemy.GetComponents<MonoBehaviour>();
+                bool hasActiveScripts = false;
+                
+                foreach (var script in scripts)
+                {
+                    if (script != null && script.enabled && 
+                        script.GetType() != typeof(Animator) &&
+                        script.GetType() != typeof(Transform))
+                    {
+                        hasActiveScripts = true;
+                        break;
+                    }
+                }
+                
+                if (hasActiveScripts)
+                    return false;
+            }
+        }
+        return true;
     }
 
     private IEnumerator GameOverSequence()
@@ -216,6 +303,12 @@ public class LevelManager : MonoBehaviour
     {
         yield return new WaitForSeconds(delay);
         SceneManager.LoadScene(sceneName);
+        
+        if (sceneName == levelName1)
+        {
+            levelScore = 0;
+            levelTimer = 60f;
+        }
     }
 
     private IEnumerator HideMessageAfterDelay()
@@ -229,6 +322,17 @@ public class LevelManager : MonoBehaviour
     {
         playerHealth = FindObjectOfType<PlayerHealth>();
         levelEndTriggered = false;
+        
+        if (scene.name == levelName1)
+        {
+            levelScore = 0;
+            levelTimer = 60f;
+            Debug.Log("Cargando Nivel 1 - Sistema de 4 enemigos");
+        }
+        else if (scene.name == levelName2)
+        {
+            Debug.Log("Cargando Nivel 2 - Sistema de enemigos jefe");
+        }
         
         if (isGameActive)
         {

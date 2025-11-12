@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: ef776e32378d78948bb27228dda5168c
+guid: 323dd82f512403142826fe3a435563df
 ModelImporter:
   serializedVersion: 21300
   internalIDToNameTable: []
@@ -33,7 +33,7 @@ ModelImporter:
     extraUserProperties: []
     clipAnimations:
     - serializedVersion: 16
-      name: Enemy
+      name: Attack1
       takeName: mixamo.com
       internalID: -203655887218126122
       firstFrame: 0
@@ -45,7 +45,7 @@ ModelImporter:
       loop: 0
       hasAdditiveReferencePose: 0
       loopTime: 1
-      loopBlend: 1
+      loopBlend: 0
       loopBlendOrientation: 1
       loopBlendPositionY: 1
       loopBlendPositionXZ: 1
