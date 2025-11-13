@@ -347,6 +347,17 @@ public class MutantEnemy : MonoBehaviour
         estaVivo = false;
         CambiarEstado(EstadoEnemigo.Death);
         
+        // NUEVO: Notificar al LevelManager que este enemigo fue eliminado
+        if (LevelManager.instance != null)
+        {
+            LevelManager.instance.OnEnemyKilled();
+            Debug.Log("Enemigo notificó su muerte al LevelManager");
+        }
+        else
+        {
+            Debug.LogWarning("LevelManager.instance es null - no se pudo notificar la muerte");
+        }
+        
         if (sonidoMuerte != null && audioSourceMuerte != null)
         {
             audioSourceMuerte.clip = sonidoMuerte;
@@ -374,6 +385,12 @@ public class MutantEnemy : MonoBehaviour
         saludActual -= dano;
         saludActual = Mathf.Clamp(saludActual, 0, saludMaxima);
         Debug.Log($"Enemigo recibió {dano} de daño. Salud actual: {saludActual}");
+        
+        // Verificar si murió después de recibir daño
+        if (saludActual <= 0 && estaVivo)
+        {
+            Morir();
+        }
     }
 
     public bool EstaMuerto()
@@ -417,6 +434,7 @@ public class MutantEnemy : MonoBehaviour
                     
                 case EstadoEnemigo.Death:
                     agenteIA.isStopped = true;
+                    agenteIA.ResetPath();
                     break;
             }
         }
@@ -427,6 +445,12 @@ public class MutantEnemy : MonoBehaviour
             animator.SetBool("IsIdle", estadoActual == EstadoEnemigo.Idle);
             animator.SetBool("IsRunning", estadoActual == EstadoEnemigo.Run);
             animator.SetBool("IsDead", estadoActual == EstadoEnemigo.Death);
+            
+            // Trigger para animación de muerte
+            if (estadoActual == EstadoEnemigo.Death)
+            {
+                animator.SetTrigger("Die");
+            }
         }
     }
 
@@ -451,6 +475,17 @@ public class MutantEnemy : MonoBehaviour
             float distancia = Vector3.Distance(transform.position, objetivo.position);
             Gizmos.color = distancia <= rangoAtaque ? Color.green : Color.white;
             Gizmos.DrawLine(transform.position, objetivo.position);
+        }
+    }
+
+    // NUEVO: Método para cuando el enemigo es destruido por otros medios
+    void OnDestroy()
+    {
+        // Si el enemigo fue destruido y todavía estaba vivo, notificar
+        if (estaVivo && LevelManager.instance != null)
+        {
+            LevelManager.instance.OnEnemyKilled();
+            Debug.Log("Enemigo destruido notificó al LevelManager");
         }
     }
 }

@@ -65,22 +65,25 @@ public class GameLevelManager : MonoBehaviour
         // Mantiene compatibilidad si lo usas con barriles antiguos
     }
 
-    private void WinGame()
-    {
-        if (levelCompleted) return;
-        levelCompleted = true;
+private void WinGame()
+{
+    if (levelCompleted) return;
+    levelCompleted = true;
 
-        Time.timeScale = 0f;
+    Time.timeScale = 0f;
 
-        if (winPanel != null)
-            winPanel.SetActive(true);
+    // Llama al controlador del Nivel 3 para mostrar la tabla de tiempos
+    Level3Controller controller = FindObjectOfType<Level3Controller>();
+    if (controller != null)
+        controller.CompletarNivel3();
 
-        if (winText != null)
-            winText.text = "¡TU GANASTE!\nHecho por Luis Cajigas, Dirkin Ojeda, Jonar Andrés";
+    Cursor.visible = true;
+    Cursor.lockState = CursorLockMode.None;
 
-        Cursor.visible = true;
-        Cursor.lockState = CursorLockMode.None;
-    }
+    // Asegurar que el panel final aparezca
+    if (winPanel != null)
+        winPanel.SetActive(true);
+}
 
     // 🔁 Botón de repetir nivel
     public void RetryLevel()

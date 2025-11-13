@@ -4,5 +4,14 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Scenes/Aeropuerto.unity
+    guid: 9fc0d4010bbf28b4594072e72b8655ab
+  - enabled: 1
+    path: Assets/Scenes/Desierto.unity
+    guid: 5077dd3f18e6d7743b08d73e25dd1f09
+  - enabled: 1
+    path: Assets/Scenes/Scene_B.unity
+    guid: a311f12392acc734a8fee2498a1f112a
   m_configObjects: {}

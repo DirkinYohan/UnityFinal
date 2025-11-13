@@ -6,6 +6,10 @@ using System.Linq;
 
 public class LevelManager : MonoBehaviour
 {
+    [Header("Tiempos")]
+    public float tiempoNivel1 = 0;
+    public float tiempoNivel2 = 0;
+    public float tiempoNivel3 = 0;
     public static LevelManager instance;
     public int levelScore;
     public float levelTimer = 60f;
@@ -23,6 +27,10 @@ public class LevelManager : MonoBehaviour
     private static bool hasSessionStarted = false;
     private bool levelEndTriggered = false;
     private PlayerHealth playerHealth;
+
+    // NUEVO: Sistema mejorado de conteo de enemigos
+    private int totalEnemiesInLevel = 0;
+    private int enemiesDefeated = 0;
 
     void Awake()
     {
@@ -50,7 +58,11 @@ public class LevelManager : MonoBehaviour
 
         if (!hasSessionStarted)
         {
-            ShowMainMenu();
+            // Si hay panel, mostrar menú; si no, arrancar el juego directo
+            if (mainMenuPanel != null)
+                ShowMainMenu();
+            else
+                StartGameSession();
         }
         else
         {
@@ -85,9 +97,104 @@ public class LevelManager : MonoBehaviour
     public void OnEnemyKilled()
     {
         if (!isGameActive || levelEndTriggered) return;
-        
+
         levelScore++;
-        Debug.Log($"Enemigo eliminado! Score: {levelScore}/4");
+        enemiesDefeated++;
+        Debug.Log($"Enemigo eliminado! Score: {levelScore}/4 - Derrotados: {enemiesDefeated}/{totalEnemiesInLevel}");
+    }
+
+    // NUEVO: Método para contar enemigos al inicio del nivel
+    public void InitializeLevelEnemies()
+    {
+        string currentScene = SceneManager.GetActiveScene().name;
+
+        if (currentScene == levelName1)
+        {
+            totalEnemiesInLevel = 4;
+            enemiesDefeated = 0;
+            levelScore = 0;
+            Debug.Log($"Nivel 1 inicializado: {totalEnemiesInLevel} enemigos objetivo");
+        }
+        else if (currentScene == levelName2)
+        {
+            CountEnemiesInScene();
+            enemiesDefeated = 0;
+            Debug.Log($"Nivel 2 inicializado: {totalEnemiesInLevel} enemigos encontrados");
+        }
+    }
+
+    private void CountEnemiesInScene()
+    {
+        MutantEnemy[] mutantEnemies = FindObjectsOfType<MutantEnemy>();
+        WarrokEnemy[] warrokEnemies = FindObjectsOfType<WarrokEnemy>();
+        GameObject[] taggedEnemies = GameObject.FindGameObjectsWithTag("Enemy");
+
+        totalEnemiesInLevel = mutantEnemies.Length + warrokEnemies.Length;
+
+        if (totalEnemiesInLevel == 0 && taggedEnemies.Length > 0)
+        {
+            totalEnemiesInLevel = taggedEnemies.Length;
+        }
+
+        Debug.Log($"Enemigos encontrados: Mutants={mutantEnemies.Length}, Warroks={warrokEnemies.Length}, Tagged={taggedEnemies.Length}, Total={totalEnemiesInLevel}");
+    }
+
+    private bool AreAllEnemiesDefeated()
+    {
+        if (enemiesDefeated >= totalEnemiesInLevel && totalEnemiesInLevel > 0)
+        {
+            Debug.Log($"Todos los enemigos derrotados por contador: {enemiesDefeated}/{totalEnemiesInLevel}");
+            return true;
+        }
+
+        string currentScene = SceneManager.GetActiveScene().name;
+
+        if (currentScene == levelName1)
+        {
+            if (levelScore >= 4)
+            {
+                Debug.Log("Nivel 1 completado: 4/4 enemigos eliminados");
+                return true;
+            }
+        }
+        else if (currentScene == levelName2)
+        {
+            return CheckActiveEnemiesInScene();
+        }
+
+        return false;
+    }
+
+    private bool CheckActiveEnemiesInScene()
+    {
+        MutantEnemy[] mutantEnemies = FindObjectsOfType<MutantEnemy>();
+        WarrokEnemy[] warrokEnemies = FindObjectsOfType<WarrokEnemy>();
+
+        foreach (var enemy in mutantEnemies)
+            if (enemy != null && enemy.gameObject.activeInHierarchy && !enemy.EstaMuerto())
+                return false;
+
+        foreach (var enemy in warrokEnemies)
+            if (enemy != null && enemy.gameObject.activeInHierarchy && !enemy.IsDead())
+                return false;
+
+        GameObject[] taggedEnemies = GameObject.FindGameObjectsWithTag("Enemy");
+        foreach (var enemy in taggedEnemies)
+        {
+            if (enemy != null && enemy.activeInHierarchy)
+            {
+                MutantEnemy mutant = enemy.GetComponent<MutantEnemy>();
+                WarrokEnemy warrok = enemy.GetComponent<WarrokEnemy>();
+
+                if ((mutant != null && !mutant.EstaMuerto()) ||
+                    (warrok != null && !warrok.IsDead()) ||
+                    (mutant == null && warrok == null))
+                    return false;
+            }
+        }
+
+        Debug.Log("¡Todos los enemigos han sido derrotados!");
+        return true;
     }
 
     public void StartGame()
@@ -95,8 +202,9 @@ public class LevelManager : MonoBehaviour
         hasSessionStarted = true;
         levelEndTriggered = false;
         levelScore = 0;
+        enemiesDefeated = 0;
         levelTimer = 60f;
-        
+
         StartGameSession();
         Debug.Log("Juego iniciado desde Aeropuerto!");
     }
@@ -104,14 +212,15 @@ public class LevelManager : MonoBehaviour
     private void StartGameSession()
     {
         isGameActive = true;
-        
-        if (mainMenuPanel != null) 
+
+        // ✅ Si hay panel, se oculta. Si no hay, no pasa nada ni se pausa el juego
+        if (mainMenuPanel != null)
             mainMenuPanel.SetActive(false);
 
         Time.timeScale = 1f;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-        
+
         if (playerHealth == null)
             playerHealth = FindObjectOfType<PlayerHealth>();
 
@@ -121,18 +230,26 @@ public class LevelManager : MonoBehaviour
 
     public void QuitGame()
     {
-        #if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
-        #else
-            Application.Quit();
-        #endif
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
     }
 
     public void ShowMainMenu()
     {
+        // ✅ Si no hay panel, no se pausa ni se bloquea
+        if (mainMenuPanel == null)
+        {
+            Debug.LogWarning("⚠ No hay panel de menú principal asignado. Iniciando directamente el juego.");
+            StartGameSession();
+            return;
+        }
+
         isGameActive = false;
-        if(mainMenuPanel != null) mainMenuPanel.SetActive(true);
-        
+        mainMenuPanel.SetActive(true);
+
         Time.timeScale = 0f;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -140,11 +257,11 @@ public class LevelManager : MonoBehaviour
 
     private void HandleLevel1()
     {
-        if(levelEndTriggered) return;
+        if (levelEndTriggered) return;
 
-        if(levelScore < 4)
+        if (levelScore < 4)
         {
-            if(levelTimer > 0f)
+            if (levelTimer > 0f)
                 levelTimer -= Time.deltaTime;
             else if (!levelEndTriggered)
             {
@@ -156,130 +273,52 @@ public class LevelManager : MonoBehaviour
         else if (!levelEndTriggered)
         {
             levelEndTriggered = true;
-            ShowMessage("Aeropuerto Completado!");
-            StartCoroutine(LoadAfterDelay(levelName2, messageDuration));
+tiempoNivel1 = 60f - levelTimer; 
+ShowMessage("Aeropuerto Completado!");
+StartCoroutine(LoadAfterDelay(levelName2, messageDuration));
+
         }
     }
 
     private void HandleLevel2()
     {
-        if(levelEndTriggered) return;
+        if (levelEndTriggered) return;
 
-        bool levelCompleted = CheckLevel2Completion();
-        
-        if(levelCompleted && !levelEndTriggered)
+        bool levelCompleted = AreAllEnemiesDefeated();
+
+        if (levelCompleted && !levelEndTriggered)
         {
-            levelEndTriggered = true;
-            StartCoroutine(ShowLevelCompletedThenMenu());
+            tiempoNivel2 = Time.timeSinceLevelLoad;
+StartCoroutine(LoadAfterDelay("Scene_B", messageDuration));  
+
         }
     }
 
-    private bool CheckLevel2Completion()
-    {
-        // Método 1: Buscar WarrokEnemy específicamente
-        WarrokEnemy warrokEnemy = FindObjectOfType<WarrokEnemy>();
-        if (warrokEnemy != null)
-        {
-            return IsWarrokEnemyDefeated(warrokEnemy);
-        }
-        
-        // Método 2: Buscar cualquier enemigo genérico
-        GameObject[] enemies = GameObject.FindGameObjectsWithTag("Enemy");
-        if (enemies.Length > 0)
-        {
-            return AreAllEnemiesDefeated(enemies);
-        }
-        
-        return true;
-    }
+private IEnumerator GameOverSequence()
+{
+    ShowMessage("Game Over");
 
-    private bool IsWarrokEnemyDefeated(WarrokEnemy enemy)
-    {
-        if (enemy == null) return true;
-        
-        try
-        {
-            // Método 1: Verificar si el GameObject está inactivo
-            if (!enemy.gameObject.activeInHierarchy)
-                return true;
-                
-            // Método 2: Verificar si el script está deshabilitado
-            if (!enemy.enabled)
-                return true;
-                
-            // Método 3: Usar el método público IsDead (más confiable)
-            if (enemy.IsDead())
-                return true;
-                
-            // Método 4: Verificar salud directamente
-            if (enemy.GetHealth() <= 0)
-                return true;
-                
-            // Si no se puede determinar, asumir que está activo
-            return false;
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogWarning("Error verificando WarrokEnemy: " + e.Message);
-            return true;
-        }
-    }
+    Time.timeScale = 0f;
+    yield return new WaitForSecondsRealtime(messageDuration);
 
-    private bool AreAllEnemiesDefeated(GameObject[] enemies)
-    {
-        foreach (GameObject enemy in enemies)
-        {
-            if (enemy.activeInHierarchy)
-            {
-                // Verificar si tiene componentes de enemigo activos
-                WarrokEnemy warrok = enemy.GetComponent<WarrokEnemy>();
-                if (warrok != null && !warrok.IsDead())
-                    return false;
-                    
-                MutantEnemy mutant = enemy.GetComponent<MutantEnemy>();
-                if (mutant != null && mutant.enabled)
-                    return false;
-                    
-                // Verificar otros componentes genéricos
-                MonoBehaviour[] scripts = enemy.GetComponents<MonoBehaviour>();
-                bool hasActiveScripts = false;
-                
-                foreach (var script in scripts)
-                {
-                    if (script != null && script.enabled && 
-                        script.GetType() != typeof(Animator) &&
-                        script.GetType() != typeof(Transform))
-                    {
-                        hasActiveScripts = true;
-                        break;
-                    }
-                }
-                
-                if (hasActiveScripts)
-                    return false;
-            }
-        }
-        return true;
-    }
+    string currentScene = SceneManager.GetActiveScene().name;
 
-    private IEnumerator GameOverSequence()
-    {
-        ShowMessage("Game Over");
-        
-        Time.timeScale = 0f;
-        yield return new WaitForSecondsRealtime(messageDuration);
-        
-        string currentScene = SceneManager.GetActiveScene().name;
-        Time.timeScale = 1f;
-        SceneManager.LoadScene(currentScene);
-        
-        levelEndTriggered = false;
-        levelScore = 0;
-        levelTimer = 60f;
-        
-        yield return new WaitForSeconds(0.1f);
-        ShowMainMenu();
-    }
+    Time.timeScale = 1f;
+    SceneManager.LoadScene(currentScene);
+
+    // Reset
+    levelEndTriggered = false;
+    levelScore = 0;
+    enemiesDefeated = 0;
+    levelTimer = 60f;
+
+    // Espera pequeño para evitar errores de carga
+    yield return new WaitForSecondsRealtime(0.1f);
+
+    // 🔥 Reiniciar partida DIRECTAMENTE (sin menú)
+    StartGameSession();
+}
+
 
     private IEnumerator ShowLevelCompletedThenMenu()
     {
@@ -290,7 +329,7 @@ public class LevelManager : MonoBehaviour
 
     private void ShowMessage(string msg)
     {
-        if(messageText != null)
+        if (messageText != null)
         {
             messageText.text = msg;
             messageText.gameObject.SetActive(true);
@@ -303,29 +342,40 @@ public class LevelManager : MonoBehaviour
     {
         yield return new WaitForSeconds(delay);
         SceneManager.LoadScene(sceneName);
-        
+
         if (sceneName == levelName1)
         {
             levelScore = 0;
+            enemiesDefeated = 0;
             levelTimer = 60f;
         }
     }
 
     private IEnumerator HideMessageAfterDelay()
-    {
-        yield return new WaitForSeconds(messageDuration);
-        if(messageText != null)
-            messageText.gameObject.SetActive(false);
-    }
+{
+    yield return new WaitForSecondsRealtime(messageDuration);
+    if (messageText != null)
+        messageText.gameObject.SetActive(false);
+}
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+
+    if (messageText != null)
+    {
+        messageText.text = "";
+        messageText.gameObject.SetActive(false);
+    }
+
         playerHealth = FindObjectOfType<PlayerHealth>();
         levelEndTriggered = false;
-        
+
+        InitializeLevelEnemies();
+
         if (scene.name == levelName1)
         {
             levelScore = 0;
+            enemiesDefeated = 0;
             levelTimer = 60f;
             Debug.Log("Cargando Nivel 1 - Sistema de 4 enemigos");
         }
@@ -333,7 +383,7 @@ public class LevelManager : MonoBehaviour
         {
             Debug.Log("Cargando Nivel 2 - Sistema de enemigos jefe");
         }
-        
+
         if (isGameActive)
         {
             Time.timeScale = 1f;
