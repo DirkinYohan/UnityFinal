@@ -26,9 +26,9 @@ public class Level3Controller : MonoBehaviour
         LevelManager.instance.tiempoNivel3 = Time.timeSinceLevelLoad;
 
         // Mostrar tiempos
-        tiempo1Text.text = $"Nivel 1: {LevelManager.instance.tiempoNivel1:F2} s";
-        tiempo2Text.text = $"Nivel 2: {LevelManager.instance.tiempoNivel2:F2} s";
-        tiempo3Text.text = $"Nivel 3: {LevelManager.instance.tiempoNivel3:F2} s";
+        tiempo1Text.text = $"Tiempo nivel 1: {LevelManager.instance.tiempoNivel1:F2} s";
+        tiempo2Text.text = $"Tiempo nivel 2: {LevelManager.instance.tiempoNivel2:F2} s";
+        tiempo3Text.text = $"Tiempo nivel 3: {LevelManager.instance.tiempoNivel3:F2} s";
 
         winPanel.SetActive(true);
 
@@ -41,7 +41,6 @@ public class Level3Controller : MonoBehaviour
     {
         Time.timeScale = 1f;
 
-        // resetear tiempos
         LevelManager.instance.tiempoNivel1 = 0;
         LevelManager.instance.tiempoNivel2 = 0;
         LevelManager.instance.tiempoNivel3 = 0;

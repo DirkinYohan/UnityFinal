@@ -6,6 +6,10 @@ using System.Linq;
 
 public class LevelManager : MonoBehaviour
 {
+    [Header("Configuración Nivel 2")]
+    [Tooltip("Número de enemigos que hace falta eliminar en 'Desierto' para pasar")]
+    public int enemigosParaPasarDesierto = 6;
+    
     [Header("Tiempos")]
     public float tiempoNivel1 = 0;
     public float tiempoNivel2 = 0;
@@ -104,24 +108,33 @@ public class LevelManager : MonoBehaviour
     }
 
     // NUEVO: Método para contar enemigos al inicio del nivel
-    public void InitializeLevelEnemies()
-    {
-        string currentScene = SceneManager.GetActiveScene().name;
+  public void InitializeLevelEnemies()
+{
+    string currentScene = SceneManager.GetActiveScene().name;
 
-        if (currentScene == levelName1)
-        {
-            totalEnemiesInLevel = 4;
-            enemiesDefeated = 0;
-            levelScore = 0;
-            Debug.Log($"Nivel 1 inicializado: {totalEnemiesInLevel} enemigos objetivo");
-        }
-        else if (currentScene == levelName2)
-        {
-            CountEnemiesInScene();
-            enemiesDefeated = 0;
-            Debug.Log($"Nivel 2 inicializado: {totalEnemiesInLevel} enemigos encontrados");
-        }
+    if (currentScene == levelName1)
+    {
+        totalEnemiesInLevel = 4;
+        enemiesDefeated = 0;
+        levelScore = 0;
+        Debug.Log($"Nivel 1 inicializado: {totalEnemiesInLevel} enemigos objetivo");
     }
+    else if (currentScene == levelName2)
+    {
+        CountEnemiesInScene();
+
+        // Si CountEnemiesInScene no encontró enemigos en el momento de la carga,
+        // forzamos el objetivo a 'enemigosParaPasarDesierto' para evitar pasar instantáneamente.
+        if (totalEnemiesInLevel <= 0)
+            totalEnemiesInLevel = enemigosParaPasarDesierto;
+        else
+            totalEnemiesInLevel = Mathf.Max(totalEnemiesInLevel, enemigosParaPasarDesierto);
+
+        enemiesDefeated = 0;
+        Debug.Log($"Nivel 2 inicializado: {totalEnemiesInLevel} enemigos objetivo (detectados o forzados)");
+    }
+}
+
 
     private void CountEnemiesInScene()
     {
@@ -255,44 +268,49 @@ public class LevelManager : MonoBehaviour
         Cursor.visible = true;
     }
 
-    private void HandleLevel1()
-    {
-        if (levelEndTriggered) return;
+private void HandleLevel1()
+{
+    if (levelEndTriggered) return;
 
-        if (levelScore < 4)
-        {
-            if (levelTimer > 0f)
-                levelTimer -= Time.deltaTime;
-            else if (!levelEndTriggered)
-            {
-                levelEndTriggered = true;
-                ShowMessage("Game Over - Tiempo agotado");
-                StartCoroutine(GameOverSequence());
-            }
-        }
+    if (levelScore < 4)
+    {
+        if (levelTimer > 0f)
+            levelTimer -= Time.deltaTime;
         else if (!levelEndTriggered)
         {
             levelEndTriggered = true;
-tiempoNivel1 = 60f - levelTimer; 
-ShowMessage("Aeropuerto Completado!");
-StartCoroutine(LoadAfterDelay(levelName2, messageDuration));
-
+            ShowMessage("Game Over - Tiempo agotado");
+            StartCoroutine(GameOverSequence());
         }
     }
-
-    private void HandleLevel2()
+    else if (!levelEndTriggered)
     {
-        if (levelEndTriggered) return;
+        levelEndTriggered = true;
 
-        bool levelCompleted = AreAllEnemiesDefeated();
+        // 🔥 Guardar tiempo real del nivel 1
+        tiempoNivel1 = Time.timeSinceLevelLoad;
 
-        if (levelCompleted && !levelEndTriggered)
-        {
-            tiempoNivel2 = Time.timeSinceLevelLoad;
-StartCoroutine(LoadAfterDelay("Scene_B", messageDuration));  
-
-        }
+        ShowMessage("Aeropuerto Completado!");
+        StartCoroutine(LoadAfterDelay("Desierto", messageDuration));
     }
+}
+
+  private void HandleLevel2()
+{
+    if (levelEndTriggered) return;
+
+    bool levelCompleted = AreAllEnemiesDefeated();
+
+    if (levelCompleted && !levelEndTriggered)
+    {
+        levelEndTriggered = true;
+
+        // 🔥 Guardar tiempo real del nivel 2
+        tiempoNivel2 = Time.timeSinceLevelLoad;
+
+        StartCoroutine(LoadAfterDelay("Scene_B", messageDuration));
+    }
+}
 
 private IEnumerator GameOverSequence()
 {
@@ -312,11 +330,9 @@ private IEnumerator GameOverSequence()
     enemiesDefeated = 0;
     levelTimer = 60f;
 
-    // Espera pequeño para evitar errores de carga
     yield return new WaitForSecondsRealtime(0.1f);
 
-    // 🔥 Reiniciar partida DIRECTAMENTE (sin menú)
-    StartGameSession();
+    StartGameSession(); // 🔥 NO VOLVER AL MENÚ, REINICIAR DIRECTO
 }
 
 
@@ -337,19 +353,25 @@ private IEnumerator GameOverSequence()
         }
         Debug.Log(msg);
     }
+private IEnumerator LoadAfterDelay(string sceneName, float delay)
+{
+    yield return new WaitForSeconds(delay);
 
-    private IEnumerator LoadAfterDelay(string sceneName, float delay)
-    {
-        yield return new WaitForSeconds(delay);
-        SceneManager.LoadScene(sceneName);
+    string escenaActual = SceneManager.GetActiveScene().name;
 
-        if (sceneName == levelName1)
-        {
-            levelScore = 0;
-            enemiesDefeated = 0;
-            levelTimer = 60f;
-        }
-    }
+    // 🔥 Guardar tiempo del Nivel 1 CUANDO SALES DEL AEROPUERTO
+    if (escenaActual == "Aeropuerto")
+        tiempoNivel1 = Time.timeSinceLevelLoad;
+
+    // 🔥 Guardar tiempo del Nivel 2 CUANDO SALES DEL DESIERTO
+    if (escenaActual == "Desierto")
+        tiempoNivel2 = Time.timeSinceLevelLoad;
+
+    SceneManager.LoadScene(sceneName);
+}
+
+
+
 
     private IEnumerator HideMessageAfterDelay()
 {
@@ -358,37 +380,48 @@ private IEnumerator GameOverSequence()
         messageText.gameObject.SetActive(false);
 }
 
-    void OnSceneLoaded(Scene scene, LoadSceneMode mode)
-    {
+void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+{
+    // 🔥 Ocultar menú SIEMPRE al cargar cualquier escena (solo aparece al inicio del juego)
+    if (mainMenuPanel != null)
+        mainMenuPanel.SetActive(false);
 
+    // 🔥 Reiniciar el mensaje de UI
     if (messageText != null)
     {
         messageText.text = "";
         messageText.gameObject.SetActive(false);
     }
 
-        playerHealth = FindObjectOfType<PlayerHealth>();
-        levelEndTriggered = false;
+    // 🔥 Volver a encontrar al jugador después de recargar escena
+    playerHealth = FindObjectOfType<PlayerHealth>();
 
-        InitializeLevelEnemies();
+    // Reset de estado interno del nivel
+    levelEndTriggered = false;
 
-        if (scene.name == levelName1)
-        {
-            levelScore = 0;
-            enemiesDefeated = 0;
-            levelTimer = 60f;
-            Debug.Log("Cargando Nivel 1 - Sistema de 4 enemigos");
-        }
-        else if (scene.name == levelName2)
-        {
-            Debug.Log("Cargando Nivel 2 - Sistema de enemigos jefe");
-        }
+    // 🔥 Inicializar enemigos correctamente según la escena
+    InitializeLevelEnemies();
 
-        if (isGameActive)
-        {
-            Time.timeScale = 1f;
-        }
+    // Configuraciones por escena
+    if (scene.name == levelName1) // Aeropuerto
+    {
+        levelScore = 0;
+        enemiesDefeated = 0;
+        levelTimer = 60f;
+        Debug.Log("Cargando Nivel 1 - Sistema de 4 enemigos");
     }
+    else if (scene.name == levelName2) // Desierto
+    {
+        Debug.Log("Cargando Nivel 2 - Sistema de enemigos jefe");
+    }
+
+    // 🔥 Asegurar que el juego esté corriendo después de cargar la escena
+    if (isGameActive)
+    {
+        Time.timeScale = 1f;
+    }
+}
+
 
     void OnEnable()
     {

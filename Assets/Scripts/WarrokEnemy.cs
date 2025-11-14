@@ -281,28 +281,40 @@ public class WarrokEnemy : MonoBehaviour
     }
 
     void OnDeath()
-    {
-        PlayDeathSound();
-        StopNavMeshAgent();
+{
+    PlayDeathSound();
+    StopNavMeshAgent();
 
-        Collider collider = GetComponent<Collider>();
-        if (collider != null)
-            collider.enabled = false;
+    // Desactivar colisiones
+    Collider col = GetComponent<Collider>();
+    if (col != null)
+        col.enabled = false;
 
-        // ✅ Avisar al sistema de progreso de niveles
-        if (LevelProgression.instance != null)
-        {
-            LevelProgression.instance.RegistrarMuerteEnemigo();
-        }
+    // Avisar a los controladores
+    if (LevelProgression.instance != null)
+        LevelProgression.instance.RegistrarMuerteEnemigo();
 
-        StartCoroutine(DestroyAfterDeath());
-    }
+    if (LevelManager.instance != null)
+        LevelManager.instance.OnEnemyKilled();
 
-    IEnumerator DestroyAfterDeath()
-    {
-        yield return new WaitForSeconds(3f);
-        Destroy(gameObject);
-    }
+    // 🔥 IMPORTANTE:
+    // NO uses SetActive(false). Solo marca como muerto,
+    // y deja que la animación corra mientras el GameObject sigue activo.
+    isDead = true;
+    currentState = EnemyState.Death;
+
+    // Después de animación → destruir
+    StartCoroutine(DestroyAfterDeath());
+}
+
+
+
+   IEnumerator DestroyAfterDeath()
+{
+    yield return new WaitForSeconds(3f);
+    Destroy(gameObject);
+}
+
 
     // ✅ MÉTODOS AUXILIARES
     public bool IsDead() => isDead;

@@ -7,6 +7,7 @@ TagManager:
   - Target
   - GunAmmo
   - Boss
+  - Enemy
   layers:
   - Default
   - TransparentFX

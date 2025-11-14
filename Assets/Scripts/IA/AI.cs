@@ -32,11 +32,19 @@ public class AI : MonoBehaviour
     public bool isDead = false;
 
     [Header("Boss Settings")]
-    public bool isBoss = false; // ✅ Marcar en el inspector si es el jefe
-    public int bossHealth = 100; // vida máxima del jefe
+    public bool isBoss = false;
+    public int bossHealth = 100;
 
     [Header("Animation")]
     public Animator animator;
+
+    // --------- SONIDO NUEVO ------------
+    [Header("Zombie Sounds (Scene 3 only)")]
+    public AudioClip idleSound;
+    public AudioClip attackSound;
+    private AudioSource audioSource;
+    private bool soundEnabled = false;
+    // ------------------------------------
 
     void Start()
     {
@@ -47,7 +55,6 @@ public class AI : MonoBehaviour
 
         player = FindObjectOfType<PlayerMovementL>()?.gameObject;
 
-        // Si es jefe, asignar su vida especial
         if (isBoss)
             health = bossHealth;
 
@@ -56,6 +63,25 @@ public class AI : MonoBehaviour
             navMeshAgent.destination = destinations[0].position;
             navMeshAgent.speed = patrolSpeed;
         }
+
+        // ---------------- SONIDO ESCENA 3 ------------------
+        string sceneName = SceneManager.GetActiveScene().name;
+
+        if (sceneName == "Scene_B")
+        {
+            audioSource = GetComponent<AudioSource>();
+            if (audioSource == null)
+                audioSource = gameObject.AddComponent<AudioSource>();
+
+            audioSource.clip = idleSound;
+            audioSource.loop = true;
+            audioSource.playOnAwake = false;
+            audioSource.volume = 0.5f;
+
+            soundEnabled = true;
+            audioSource.Play();
+        }
+        // ---------------------------------------------------
     }
 
     void Update()
@@ -111,6 +137,10 @@ public class AI : MonoBehaviour
         {
             canAttack = false;
             animator.SetTrigger("Attack");
+
+            if (soundEnabled && attackSound != null)
+                audioSource.PlayOneShot(attackSound);
+
             StartCoroutine(AttackCooldownTimer());
         }
     }
@@ -126,13 +156,11 @@ public class AI : MonoBehaviour
             GameManager.instance.health -= 10;
 
             if (GameManager.instance.health <= 0)
-                Invoke(nameof(RestartLevel), 0.5f);
+            {
+                GameOverManager.instance.TriggerGameOver();
+                isDead = true;
+            }
         }
-    }
-
-    void RestartLevel()
-    {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
     IEnumerator AttackCooldownTimer()
@@ -141,12 +169,10 @@ public class AI : MonoBehaviour
         canAttack = true;
     }
 
-    // --- DAÑO Y MUERTE ---
     public void TakeDamage(int damage)
     {
         if (isDead) return;
 
-        // ✅ Si es jefe, el daño de las balas es 10
         if (isBoss)
             damage = 10;
 
@@ -156,37 +182,37 @@ public class AI : MonoBehaviour
             Die();
     }
 
-  public void GrenadeImpact()
-{
-    if (isDead) return;
-
-    if (CompareTag("Boss"))
-        TakeDamage(30);
-    else
-        TakeDamage(999);
-}
-
-
-   void Die()
-{
-    isDead = true;
-    navMeshAgent.enabled = false;
-    animator.SetBool("isDead", true);
-
-    if (CompareTag("Boss"))
+    public void GrenadeImpact()
     {
-        // 🧟‍♂️ Si es el jefe
-        if (GameLevelManager.Instance != null)
-            GameLevelManager.Instance.BossDefeated();
-    }
-    else
-    {
-        // 👾 Enemigos normales suman puntos
-        if (GameLevelManager.Instance != null)
-            GameLevelManager.Instance.AddScore(50);
+        if (isDead) return;
+
+        if (CompareTag("Boss"))
+            TakeDamage(30);
+        else
+            TakeDamage(999);
     }
 
-    Destroy(gameObject, 3f);
-}
+    void Die()
+    {
+        isDead = true;
 
+        navMeshAgent.enabled = false;
+        animator.SetBool("isDead", true);
+
+        if (soundEnabled && audioSource != null)
+            audioSource.Stop();
+
+        if (CompareTag("Boss"))
+        {
+            if (GameLevelManager.Instance != null)
+                GameLevelManager.Instance.BossDefeated();
+        }
+        else
+        {
+            if (GameLevelManager.Instance != null)
+                GameLevelManager.Instance.AddScore(50);
+        }
+
+        Destroy(gameObject, 3f);
+    }
 }

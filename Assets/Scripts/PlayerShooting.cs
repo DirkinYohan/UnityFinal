@@ -21,6 +21,9 @@ public class PlayerShooting : MonoBehaviour
     [Header("LAYER MASK")]
     public LayerMask enemyLayerMask = 1; // Capa para detectar enemigos
 
+    [Header("CAJAS MOVIBLES")]
+    public float fuerzaCaja = 15f; // Fuerza aplicada a las cajas al dispararles
+
     private float nextFireTime = 0f;
 
     void Start()
@@ -89,6 +92,9 @@ public class PlayerShooting : MonoBehaviour
             
             // Verificar si el objeto impactado es un barril
             CheckBarrelHit(hit.collider.gameObject);
+            
+            // NUEVO: Verificar si el objeto impactado es una caja movible
+            CheckBoxHit(hit.collider.gameObject, shootDirection);
             
             if (impactEffect != null)
             {
@@ -172,6 +178,27 @@ public class PlayerShooting : MonoBehaviour
             {
                 Instantiate(impactEffect, hitObject.transform.position, Quaternion.identity);
             }
+        }
+    }
+
+    // NUEVO MÉTODO PARA CAJAS MOVIBLES
+    void CheckBoxHit(GameObject hitObject, Vector3 shootDirection)
+    {
+        // Buscar el componente MovableBox en el objeto impactado o en sus padres
+        MovableBox movableBox = hitObject.GetComponent<MovableBox>();
+        
+        if (movableBox == null)
+        {
+            // Si no se encuentra en el objeto directo, buscar en los padres
+            movableBox = hitObject.GetComponentInParent<MovableBox>();
+        }
+
+        if (movableBox != null)
+        {
+            Debug.Log("📦 CAJA MOVIBLE IMPACTADA");
+            
+            // Aplicar fuerza a la caja
+            movableBox.MoverCaja(shootDirection, fuerzaCaja);
         }
     }
 
