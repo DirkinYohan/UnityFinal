@@ -38133,7 +38133,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   characterController: {fileID: 1393820310}
-  speed: 4
+  speed: 6
   groundCheck: {fileID: 1705926998}
   sphereRadius: 0.3
   groundMask:
